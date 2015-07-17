@@ -1,4 +1,4 @@
-﻿<# 
+﻿<#
 .SYNOPSIS
 Deploy Multiple VMs to vCenter
 
@@ -29,7 +29,7 @@ Runs DeployVM specifying vCenter address
 .EXAMPLE
 .\DeployVM.ps1 -csvfile "E:\Scripts\Deploy\DeployVM.csv" -vcenter my.vcenter.address -auto
 Runs DeployVM specifying path to csv file, vCenter address and no confirmation
- 
+
 .EXAMPLE
 .\DeployVM.ps1 -createcsv
 Creates a new/blank DeployVM.csv file in same directory as script
@@ -41,11 +41,17 @@ Version: 1.2
 
 Author: JJ Vidanez
 Created: Nov 2014
-Version: 1.3 
+Version: 1.3
 Add creation onthefly for customization Spec for linux systems
 Ability to create machines names and guest hostname using different names
 Added a value to find out the kind of disk because powercli bug for SDRS reported at https://communities.vmware.com/message/2442684#2442684
 Remove the dependency for an already created OScustomization Spec
+
+Author: JJ Vidanez
+Created: Jul 2015
+Version: 1.4
+Adding domain credential request for Windows systems
+
 
 REQUIREMENTS
 PowerShell v3 or greater
@@ -68,7 +74,7 @@ CSV Field Definitions
 	Disk2 - Size of additional disk to add (GB)(optional)
 	Disk3 - Size of additional disk to add (GB)(optional)
 	Disk4 - Size of additional disk to add (GB)(optional)
-    SDRS - Mark to use a SDRS or not - Must be 'true' or 'false' 
+    SDRS - Mark to use a SDRS or not - Must be 'true' or 'false'
 	Datastore - Datastore placement - Can be a datastore or datastore cluster
 	DiskStorageFormat - Disk storage format - Must be 'Thin', 'Thick' or 'EagerZeroedThick' - Only funcional when SDRS = true
 	NetType - vSwitch type - Must be 'vSS' or 'vDS'
@@ -81,7 +87,7 @@ CSV Field Definitions
 	sDNS - Secondary NIC must be populated
 	Notes - Description applied to the vCenter Notes field on VM
     Domain - DNS Domain must be populated
-	
+
 CREDITS
 Handling New-VM Async - LucD - @LucD22
 http://www.lucd.info/2010/02/21/about-async-tasks-the-get-task-cmdlet-and-a-hash-table/
@@ -91,7 +97,7 @@ http://blogs.vmware.com/PowerCLI/2014/06/working-customization-specifications-po
 http://blogs.vmware.com/PowerCLI/2014/06/working-customization-specifications-powercli-part-3.html
 
 USE AT YOUR OWN RISK!
-	
+
 .LINK
 http://blog.smasterson.com/2014/05/21/deploying-multiple-vms-via-powercli-updated-v1-2/
 http://www.vidanez.com/2014/11/02/crear-multiples-linux-vms-de-un-fichero-csv-usando-powercli-deploying-multiple-linux-vms-using-powercli/
@@ -111,13 +117,13 @@ param (
     [parameter(Mandatory=$false)]
     [switch]$createcsv
     )
- 
+
 #--------------------------------------------------------------------
 # User Defined Variables
- 
+
 #--------------------------------------------------------------------
 # Static Variables
- 
+
 $scriptName = "DeployVM"
 $scriptVer = "1.3"
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
@@ -129,26 +135,28 @@ $deployedFile = $deployedDir + "DeployVM_" + (Get-Date -uformat %m-%d-%Y_%I-%M-%
 $exportpath = $scriptDir + "\DeployVM.csv"
 $headers = "" | Select-Object NameVM, Name, Boot, OSType, Template, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain
 $taskTab = @{}
- 
+$credentials = @{}
+
 #--------------------------------------------------------------------
 # Load Snap-ins
- 
+
 # Add VMware snap-in if required
 If ((Get-PSSnapin -Name VMware.VimAutomation.Core -ErrorAction SilentlyContinue) -eq $null) {add-pssnapin VMware.VimAutomation.Core}
- 
+
 #--------------------------------------------------------------------
 # Functions
- 
+
 Function Out-Log {
     Param(
         [Parameter(Mandatory=$true)][string]$LineValue,
         [Parameter(Mandatory=$false)][string]$fcolor = "White"
     )
- 
+
     Add-Content -Path $logfile -Value $LineValue
     Write-Host $LineValue -ForegroundColor $fcolor
 }
- 
+
+
 Function Read-OpenFileDialog([string]$WindowTitle, [string]$InitialDirectory, [string]$Filter = "All files (*.*)|*.*", [switch]$AllowMultiSelect)
 {
     Add-Type -AssemblyName System.Windows.Forms
@@ -161,17 +169,17 @@ Function Read-OpenFileDialog([string]$WindowTitle, [string]$InitialDirectory, [s
     $openFileDialog.ShowDialog() > $null
     if ($AllowMultiSelect) { return $openFileDialog.Filenames } else { return $openFileDialog.Filename }
 }
- 
+
 #--------------------------------------------------------------------
 # Main Procedures
- 
+
 # Start Logging
 Clear-Host
 If (!(Test-Path $logDir)) {New-Item -ItemType directory -Path $logDir | Out-Null}
 Out-Log "**************************************************************************************"
 Out-Log "$scriptName`tVer:$scriptVer`t`t`t`tStart Time:`t$starttime"
 Out-Log "**************************************************************************************`n"
- 
+
 # If requested, create DeployVM.csv and exit
 If ($createcsv) {
     If (Test-Path $exportpath) {
@@ -188,7 +196,7 @@ If ($createcsv) {
 # Ensure PowerCLI is at least version 5.5 R2 (Build 1649237)
 If ((Get-PowerCLIVersion).Build -lt 1649237) {
     Out-Log "Error: DeployVM script requires PowerCLI version 5.5 R2 (Build 1649237) or later" "Red"
-	Out-Log "PowerCLI Version Detected: $((Get-PowerCLIVersion).UserFriendlyVersion)" "Red"    
+	Out-Log "PowerCLI Version Detected: $((Get-PowerCLIVersion).UserFriendlyVersion)" "Red"
     Out-Log "Exiting...`n`n" "Red"
     Exit
 }
@@ -198,31 +206,31 @@ If ($csvfile -eq "" -or !(Test-Path $csvfile) -or !$csvfile.EndsWith("DeployVM.c
     Out-Log "Path to DeployVM.csv not specified...prompting`n" "Yellow"
     $csvfile = Read-OpenFileDialog "Locate DeployVM.csv" "C:\" "DeployVM.csv|DeployVM.csv"
 }
- 
+
 If ($csvfile -eq "" -or !(Test-Path $csvfile) -or !$csvfile.EndsWith("DeployVM.csv")) {
     Out-Log "`nStill can't find it...I give up" "Red"
     Out-Log "Exiting..." "Red"
     Exit
 }
- 
+
 Out-Log "Using $csvfile`n" "Yellow"
 # Make copy of DeployVM.csv
 If (!(Test-Path $deployedDir)) {New-Item -ItemType directory -Path $deployedDir | Out-Null}
 Copy-Item $csvfile -Destination $deployedFile | Out-Null
- 
+
 # Import VMs from csv
 $newVMs = Import-Csv $csvfile
 $newVMs = $newVMs | Where {$_.Name -ne ""}
 [INT]$totalVMs = @($newVMs).count
 Out-Log "New VMs to create: $totalVMs" "Yellow"
- 
+
 # Check to ensure csv is populated
 If ($totalVMs -lt 1) {
-    Out-Log "`nError: No entries found in DeployVM.csv" "Red"
+    Out-Log "`nError: No enough entries found in DeployVM.csv Minimal 2" "Red"
     Out-Log "Exiting...`n" "Red"
     Exit
 }
- 
+
 # Show input and ask for confirmation, unless -auto was used
 If (!$auto) {
     $newVMs | Out-GridView -Title "VMs to be Created"
@@ -232,10 +240,10 @@ If (!$auto) {
         Exit
     }
 }
- 
+
 # Connect to vCenter server
 If ($vcenter -eq "") {$vcenter = Read-Host "`nEnter vCenter server FQDN or IP"}
- 
+
 Try {
     Out-Log "`nConnecting to vCenter - $vcenter`n`n" "Yellow"
     Connect-VIServer $vcenter -EA Stop | Out-Null
@@ -244,7 +252,18 @@ Try {
     Out-Log "Exiting...`r`n`r`n" "Red"
     Exit
 }
- 
+
+# Reading VMs to deploy and if they are windows asking to load credentials per Domain
+Foreach ($VM in $newVMs) {
+    $Error.Clear()
+    If ($VM.OSType -eq "Windows") {
+        If ( !$credentials.ContainsKey($VM.domain)) {
+              $new_cred = Get-Credential
+              $credentials.Add($VM.domain,$new_cred)
+        }
+    }
+ }
+
 # Start provisioning VMs
 $v = 0
 Out-Log "Deploying VMs`n" "Yellow"
@@ -257,8 +276,12 @@ Foreach ($VM in $newVMs) {
     # Create custom OS Custumization spec
    If ($vm.DHCP -match "true") {
         If ($VM.OSType -eq "Windows") {
+            $credential = $credentials.Get_Item($VM.domain)
+            $fullname = $credential.UserName.Split('\')[1]
+            $orgname = $credential.UserName.Split('\')[0]
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
-            -NamingPrefix $VM.Name -Domain $VM.domain -OSType Windows
+            -NamingPrefix $VM.Name -Domain $VM.domain  -FullName $fullname -OrgName $orgname `
+            -DomainCredentials $credential -TimeZone 085 -OSType Windows
 	        $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
 	        -IpMode UseDhcp | Out-Null
 	    } ElseIF ($VM.OSType -eq "Linux") {
@@ -269,9 +292,13 @@ Foreach ($VM in $newVMs) {
           }
 	} Else {
 		If ($VM.OSType -eq "Windows") {
+            $credential = $credentials.Get_Item($VM.domain)
+            $fullname = $credential.UserName.Split('\')[1]
+            $orgname = $credential.UserName.Split('\')[0]
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
-            -NamingPrefix $VM.Name -Domain $VM.domain -OSType Windows
-	        $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
+            -NamingPrefix $VM.Name -Domain $VM.domain -FullName $fullname -OrgName $orgname`
+            -DomainCredentials $credential -TimeZone 085 -OSType Windows
+            $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
 	        -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask `
 	        -Dns $VM.pDNS,$VM.sDNS -DefaultGateway $VM.Gateway | Out-Null
 	    } ElseIF ($VM.OSType -eq "Linux") {
@@ -281,7 +308,7 @@ Foreach ($VM in $newVMs) {
             -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask -DefaultGateway $VM.Gateway | Out-Null
           }
 	}
- 
+
     # Create VM depeding on the parameter SDRS true or false
     Out-Log "Deploying $vmName"
     If ($VM.SDRS -match "true") {
@@ -309,10 +336,10 @@ Foreach ($VM in $newVMs) {
         }
     }
 }
- 
+
 Out-Log "`n`nAll Deployment Tasks Created" "Yellow"
 Out-Log "`n`nMonitoring Task Processing" "Yellow"
- 
+
 # When finsihed deploying, reconfigure new VMs
 $totalTasks = $taskTab.Count
 $runningTasks = $totalTasks
@@ -327,11 +354,11 @@ while($runningTasks -gt 0){
       Out-Log "`n`nReconfiguring $vmName" "Yellow"
       $VM = Get-VM $vmName
       $VMconfig = $newVMs | Where {$_.Name -eq $vmName}
-      
+
 	  # Set CPU and RAM
       Out-Log "Setting vCPU(s) and RAM on $vmName" "Yellow"
       $VM | Set-VM -NumCpu $VMconfig.CPU -MemoryGB $VMconfig.RAM -Confirm:$false | Out-Null
-      
+
 	  # Set port group on virtual adapter
       Out-Log "Setting Port Group on $vmName" "Yellow"
       If ($VMconfig.NetType -match "vSS") {
@@ -344,9 +371,9 @@ while($runningTasks -gt 0){
 			  'Portgroup' = $VMconfig.network
 			  'Confirm' = $false
 		  }
-	  }	  
+	  }
 	  $VM | Get-NetworkAdapter | Set-NetworkAdapter @network | Out-Null
-      
+
 	  # Add additional disks if needed
       If ($VMConfig.Disk2 -gt 1) {
         Out-Log "Adding additional disk on $vmName - don't forget to format within the OS" "Yellow"
@@ -360,8 +387,8 @@ while($runningTasks -gt 0){
         Out-Log "Adding additional disk on $vmName - don't forget to format within the OS" "Yellow"
         $VM | New-HardDisk -CapacityGB $VMConfig.Disk4 -StorageFormat $VMConfig.DiskStorageFormat -Persistence persistent | Out-Null
       }
-      
-      
+
+
 	  # Boot VM
 	  If ($VMconfig.Boot -match "true") {
       	Out-Log "Booting $vmName" "Yellow"
@@ -391,18 +418,18 @@ while($runningTasks -gt 0){
   }
   Start-Sleep -Seconds 10
 }
- 
+
 #--------------------------------------------------------------------
 # Close Connections
- 
+
 Disconnect-VIServer -Server $vcenter -Force -Confirm:$false
- 
+
 #--------------------------------------------------------------------
 # Outputs
- 
+
 Out-Log "`n**************************************************************************************"
 Out-Log "Processing Complete" "Yellow"
- 
+
 If ($successVMs -ne $null) {
     Out-Log "`nThe following VMs were successfully created:" "Yellow"
     Foreach ($success in $successVMs) {Out-Log "$success" "Green"}
@@ -415,7 +442,7 @@ If ($failDeploy -ne $null) {
     Out-Log "`nThe following VMs failed to deploy:" "Yellow"
     Foreach ($deploy in $failDeploy) {Out-Log "$deploy" "Red"}
 }
- 
+
 $finishtime = Get-Date -uformat "%m-%d-%Y %I:%M:%S"
 Out-Log "`n`n"
 Out-Log "**************************************************************************************"
