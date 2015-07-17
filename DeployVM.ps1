@@ -282,8 +282,8 @@ Foreach ($VM in $newVMs) {
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain  -FullName $fullname -OrgName $orgname `
             -DomainCredentials $credential -TimeZone 085 -OSType Windows
-	        $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
-	        -IpMode UseDhcp | Out-Null
+	    $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
+	    -IpMode UseDhcp | Out-Null
 	    } ElseIF ($VM.OSType -eq "Linux") {
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -OSType Linux -DnsServer $VM.pDNS,$VM.sDNS
@@ -291,16 +291,16 @@ Foreach ($VM in $newVMs) {
             -IpMode UseDhcp | Out-Null
           }
 	} Else {
-		If ($VM.OSType -eq "Windows") {
+            If ($VM.OSType -eq "Windows") {
             $credential = $credentials.Get_Item($VM.domain)
             $fullname = $credential.UserName.Split('\')[1]
             $orgname = $credential.UserName.Split('\')[0]
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
-            -NamingPrefix $VM.Name -Domain $VM.domain -FullName $fullname -OrgName $orgname`
+            -NamingPrefix $VM.Name -Domain $VM.domain -FullName $fullname -OrgName $orgname `
             -DomainCredentials $credential -TimeZone 085 -OSType Windows
             $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
-	        -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask `
-	        -Dns $VM.pDNS,$VM.sDNS -DefaultGateway $VM.Gateway | Out-Null
+	    -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask `
+	    -Dns $VM.pDNS,$VM.sDNS -DefaultGateway $VM.Gateway | Out-Null
 	    } ElseIF ($VM.OSType -eq "Linux") {
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -OSType Linux -DnsServer $VM.pDNS,$VM.sDNS
