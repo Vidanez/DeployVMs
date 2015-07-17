@@ -125,7 +125,7 @@ param (
 # Static Variables
 
 $scriptName = "DeployVM"
-$scriptVer = "1.3"
+$scriptVer = "1.4"
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $starttime = Get-Date -uformat "%m-%d-%Y %I:%M:%S"
 $logDir = $scriptDir + "\Logs\"
