@@ -258,6 +258,7 @@ Foreach ($VM in $newVMs) {
     $Error.Clear()
     If ($VM.OSType -eq "Windows") {
         If ( !$credentials.ContainsKey($VM.domain)) {
+	      Out-Log "`Load Admin credentials for domain - $VM.domain`n`n" "Yellow"
               $new_cred = Get-Credential
               $credentials.Add($VM.domain,$new_cred)
         }
