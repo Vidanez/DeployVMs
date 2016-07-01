@@ -52,13 +52,26 @@ Created: Jul 2015
 Version: 1.4
 Adding domain credential request for Windows systems
 
+Author : Simon Davies - Everything-Virtual.com
+Created :  May 2016
+Version: 1.5
+Adding AD Computer Account Creation in specified OU's for VM's at start of deployment - Yes even Linux as that was a requirement
+It's possible to restrict this to just Windows VM's by removing the comment at line #261
+
+Author: JJ Vidanez & Robert Rowan
+Created: Jun 2016
+Version: 1.6
+Fixed issue to deploy just one VM
+Adding banner for each credential to show the domain where credentials are set
+If OU parameter is defined at the OU create the object on AD where the machine is register Linux and Windows
+
 
 REQUIREMENTS
 PowerShell v3 or greater
 vCenter (tested on 5.1/5.5)
 PowerCLI 5.5 R2 or later
 CSV File - VM info with the following headers
-    NameVM, Name, Boot, OSType, Template, CustSpec, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain
+    NameVM, Name, Boot, OSType, Template, CustSpec, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain, OU
     Must be named DeployVM.csv
     Can be created with -createcsv switch
 CSV Field Definitions
@@ -70,7 +83,7 @@ CSV Field Definitions
 	Folder - Folder in which to place VM in vCenter (optional)
 	ResourcePool - VM placement - can be a reasource pool, host or a cluster
 	CPU - Number of vCPU
-	RAM - Amount of RAM
+	RAM - Amount of RAM in GB
 	Disk2 - Size of additional disk to add (GB)(optional)
 	Disk3 - Size of additional disk to add (GB)(optional)
 	Disk4 - Size of additional disk to add (GB)(optional)
@@ -87,6 +100,7 @@ CSV Field Definitions
 	sDNS - Secondary NIC must be populated
 	Notes - Description applied to the vCenter Notes field on VM
     Domain - DNS Domain must be populated
+    OU - OU to create new computer accounts, must be the distinguished name eg "OU=TestOU1,OU=Servers,DC=my-homelab,DC=local"
 
 CREDITS
 Handling New-VM Async - LucD - @LucD22
@@ -125,7 +139,7 @@ param (
 # Static Variables
 
 $scriptName = "DeployVM"
-$scriptVer = "1.4"
+$scriptVer = "1.6"
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $starttime = Get-Date -uformat "%m-%d-%Y %I:%M:%S"
 $logDir = $scriptDir + "\Logs\"
@@ -133,15 +147,16 @@ $logfile = $logDir + $scriptName + "_" + (Get-Date -uformat %m-%d-%Y_%I-%M-%S) +
 $deployedDir = $scriptDir + "\Deployed\"
 $deployedFile = $deployedDir + "DeployVM_" + (Get-Date -uformat %m-%d-%Y_%I-%M-%S) + "_" + $env:username  + ".csv"
 $exportpath = $scriptDir + "\DeployVM.csv"
-$headers = "" | Select-Object NameVM, Name, Boot, OSType, Template, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain
+$headers = "" | Select-Object NameVM, Name, Boot, OSType, Template, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain, OU
 $taskTab = @{}
 $credentials = @{}
+$localAdminPassword = ""
 
 #--------------------------------------------------------------------
 # Load Snap-ins
 
 # Add VMware snap-in if required
-If ((Get-PSSnapin -Name VMware.VimAutomation.Core -ErrorAction SilentlyContinue) -eq $null) {add-pssnapin VMware.VimAutomation.Core}
+If ((Get-PSSnapin -Name VMware.VimAutomation.Core -ErrorAction SilentlyContinue) -eq $null) {add-pssnapin VMware.VimAutomation.Core} {add-pssnapin ActiveDirectory}
 
 #--------------------------------------------------------------------
 # Functions
@@ -156,7 +171,6 @@ Function Out-Log {
     Write-Host $LineValue -ForegroundColor $fcolor
 }
 
-
 Function Read-OpenFileDialog([string]$WindowTitle, [string]$InitialDirectory, [string]$Filter = "All files (*.*)|*.*", [switch]$AllowMultiSelect)
 {
     Add-Type -AssemblyName System.Windows.Forms
@@ -169,6 +183,7 @@ Function Read-OpenFileDialog([string]$WindowTitle, [string]$InitialDirectory, [s
     $openFileDialog.ShowDialog() > $null
     if ($AllowMultiSelect) { return $openFileDialog.Filenames } else { return $openFileDialog.Filename }
 }
+
 
 #--------------------------------------------------------------------
 # Main Procedures
@@ -226,7 +241,7 @@ Out-Log "New VMs to create: $totalVMs" "Yellow"
 
 # Check to ensure csv is populated
 If ($totalVMs -lt 1) {
-    Out-Log "`nError: No enough entries found in DeployVM.csv Minimal 2" "Red"
+    Out-Log "`nError: No enough entries found in DeployVM.csv" "Red"
     Out-Log "Exiting...`n" "Red"
     Exit
 }
@@ -241,29 +256,36 @@ If (!$auto) {
     }
 }
 
-# Connect to vCenter server
-If ($vcenter -eq "") {$vcenter = Read-Host "`nEnter vCenter server FQDN or IP"}
-
-Try {
-    Out-Log "`nConnecting to vCenter - $vcenter`n`n" "Yellow"
-    Connect-VIServer $vcenter -EA Stop | Out-Null
-} Catch {
-    Out-Log "`r`n`r`nUnable to connect to $vcenter" "Red"
-    Out-Log "Exiting...`r`n`r`n" "Red"
-    Exit
-}
 
 # Reading VMs to deploy and if they are windows asking to load credentials per Domain
 Foreach ($VM in $newVMs) {
     $Error.Clear()
+    $credentialDomain =  $VM.Domain
+
     If ($VM.OSType -eq "Windows") {
-        If ( !$credentials.ContainsKey($VM.domain)) {
-	      Out-Log "`Load Admin credentials for domain - $VM.domain`n`n" "Yellow"
-              $new_cred = Get-Credential
+        If ( !$credentials.ContainsKey($credentialDomain)) {
+              $new_cred = Get-Credential -Message "Admin credentials for domain - $credentialDomain use format DOMAIN\USERNAME"
               $credentials.Add($VM.domain,$new_cred)
+              $localAdminPassword = Read-Host "`r`n`r`nEnter a password for the Windows local 'Administrator' account:"
         }
     }
  }
+
+
+
+# Connect to vCenter server
+If ($vcenter -eq "") {$vcenter = Read-Host "`nEnter vCenter server FQDN or IP"}
+
+    $credential = $credentials.Get_Item("ph.esl-asia.com")
+    
+    Try {
+        Out-Log "`nConnecting to vCenter - $vcenter`n`n" "Yellow"
+        Connect-VIServer $vcenter -EA Stop -Credential $credential | Out-Null
+    } Catch {
+        Out-Log "`r`n`r`nUnable to connect to $vcenter" "Red"
+        Out-Log "Exiting...`r`n`r`n" "Red"
+        Exit
+}
 
 # Start provisioning VMs
 $v = 0
@@ -273,46 +295,58 @@ Foreach ($VM in $newVMs) {
 	$vmName = $VM.Name
     $v++
 	$vmStatus = "[{0} of {1}] {2}" -f $v, $newVMs.count, $vmName
-	Write-Progress -Activity "Deploying VMs" -Status $vmStatus -PercentComplete (100*$v/($newVMs.count))
+	Write-Progress -Activity "Deploying VMs" -Status $vmStatus -PercentComplete (100*$v/($newVMs.count + 1))
     # Create custom OS Custumization spec
-   If ($vm.DHCP -match "true") {
+   If ($vm.DHCP -match "TRUE") {
         If ($VM.OSType -eq "Windows") {
             $credential = $credentials.Get_Item($VM.domain)
-            $fullname = $credential.UserName.Split('\')[1]
-            $orgname = $credential.UserName.Split('\')[0]
+            $fullname = "ESL-ASIA"
+            $orgname = "ESL-ASIA"
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain  -FullName $fullname -OrgName $orgname `
-            -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows
-	          $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
-	          -IpMode UseDhcp | Out-Null
+            -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows -AdminPassword $localAdminPassword
+	        $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
+	        -IpMode UseDhcp | Out-Null
+            If ( !$VM.OU -eq "") {
+                New-ADComputer -Name $VM.Name-Path  $VM.OU -credential $credential -server $VM.pDNS
+            }
 	    } ElseIF ($VM.OSType -eq "Linux") {
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -OSType Linux -DnsServer $VM.pDNS,$VM.sDNS
             $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
             -IpMode UseDhcp | Out-Null
+            If ( !$VM.OU -eq "") {
+                New-ADComputer -Name $VM.Name-Path  $VM.OU -credential $credential -server $VM.pDNS
+            }
           }
 	} Else {
-            If ($VM.OSType -eq "Windows") {
+		If ($VM.OSType -eq "Windows") {
             $credential = $credentials.Get_Item($VM.domain)
-            $fullname = $credential.UserName.Split('\')[1]
-            $orgname = $credential.UserName.Split('\')[0]
+            $fullname = "ESL-ASIA"
+            $orgname = "ESL-ASIA"
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -FullName $fullname -OrgName $orgname `
-            -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows
+            -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows -AdminPassword $localAdminPassword
             $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
-	          -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask `
-	          -Dns $VM.pDNS,$VM.sDNS -DefaultGateway $VM.Gateway | Out-Null
-	    } ElseIF ($VM.OSType -eq "Linux") {
+	        -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask `
+	        -Dns $VM.pDNS,$VM.sDNS -DefaultGateway $VM.Gateway | Out-Null
+            If ( !$VM.OU -eq "") {
+                New-ADComputer -Name $VM.Name-Path  $VM.OU -credential $credential -server $VM.pDNS
+            }
+        } ElseIF ($VM.OSType -eq "Linux") {
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -OSType Linux -DnsServer $VM.pDNS,$VM.sDNS
             $tempSpec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping `
             -IpMode UseStaticIP -IpAddress $VM.IPAddress -SubnetMask $VM.SubnetMask -DefaultGateway $VM.Gateway | Out-Null
+            If ( !$VM.OU -eq "") {
+                New-ADComputer -Name $VM.Name-Path  $VM.OU -credential $credential -server $VM.pDNS
+            }
           }
 	}
 
     # Create VM depeding on the parameter SDRS true or false
     Out-Log "Deploying $vmName"
-    If ($VM.SDRS -match "true") {
+    If ($VM.SDRS -match "TRUE") {
         Out-Log "SDRS Cluster disk on $vmName - removing DiskStorageFormat parameter " "Yellow"
         $taskTab[(New-VM -Name $VM.NameVM -ResourcePool $VM.ResourcePool -Location $VM.Folder -Datastore $VM.Datastore `
     -Notes $VM.Notes -Template $VM.Template -OSCustomizationSpec temp$vmName -RunAsync -EA SilentlyContinue).Id] = $VM.Name
