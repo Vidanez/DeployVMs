@@ -276,7 +276,7 @@ Foreach ($VM in $newVMs) {
 # Connect to vCenter server
 If ($vcenter -eq "") {$vcenter = Read-Host "`nEnter vCenter server FQDN or IP"}
 
-    $credential = $credentials.Get_Item("ph.esl-asia.com")
+    $credential = $credentials.Get_Item("MyDomain.com")
     
     Try {
         Out-Log "`nConnecting to vCenter - $vcenter`n`n" "Yellow"
