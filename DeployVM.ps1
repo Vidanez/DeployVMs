@@ -276,7 +276,7 @@ Foreach ($VM in $newVMs) {
 # Connect to vCenter server
 If ($vcenter -eq "") {$vcenter = Read-Host "`nEnter vCenter server FQDN or IP"}
 
-    $credential = $credentials.Get_Item("ph.esl-asia.com")
+    $credential = $credentials.Get_Item("mydomain.com")
     
     Try {
         Out-Log "`nConnecting to vCenter - $vcenter`n`n" "Yellow"
@@ -300,8 +300,8 @@ Foreach ($VM in $newVMs) {
    If ($vm.DHCP -match "TRUE") {
         If ($VM.OSType -eq "Windows") {
             $credential = $credentials.Get_Item($VM.domain)
-            $fullname = "ESL-ASIA"
-            $orgname = "ESL-ASIA"
+            $fullname = "MYORG"
+            $orgname = "MYORG"
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain  -FullName $fullname -OrgName $orgname `
             -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows -AdminPassword $localAdminPassword
@@ -322,8 +322,8 @@ Foreach ($VM in $newVMs) {
 	} Else {
 		If ($VM.OSType -eq "Windows") {
             $credential = $credentials.Get_Item($VM.domain)
-            $fullname = "ESL-ASIA"
-            $orgname = "ESL-ASIA"
+            $fullname = "MYORG"
+            $orgname = "MYORG"
             $tempSpec = New-OSCustomizationSpec -Name temp$vmName -NamingScheme fixed `
             -NamingPrefix $VM.Name -Domain $VM.domain -FullName $fullname -OrgName $orgname `
             -DomainCredentials $credential -TimeZone 085 -ChangeSid -OSType Windows -AdminPassword $localAdminPassword
