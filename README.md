@@ -69,13 +69,19 @@ If OU parameter is defined at the OU create the object on AD where the machine i
 
 # REQUIREMENTS
 PowerShell v3 or greater
+
 vCenter (tested on 5.1/5.5)
+
 PowerCLI 5.5 R2 or later
+
 CSV File - VM info with the following headers
+
     NameVM, Name, Boot, OSType, Template, CustSpec, Folder, ResourcePool, CPU, RAM, Disk2, Disk3, Disk4, SDRS, Datastore, DiskStorageFormat, NetType, Network, DHCP, IPAddress, SubnetMask, Gateway, pDNS, sDNS, Notes, Domain, OU
     Must be named DeployVM.csv
     Can be created with -createcsv switch
+
 CSV Field Definitions
+    
     NameVM - Name of VM
 	Name - Name of guest OS VM
 	Boot - Determines whether or not to boot the VM - Must be 'true' or 'false'
