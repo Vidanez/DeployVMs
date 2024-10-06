@@ -1,7 +1,7 @@
 DeployVMs
 =========
 
-#Deploying multiple  VMs using PowerCli
+# Deploying multiple  VMs using PowerCli
 ```
 .DESCRIPTION
 VMs are deployed asynchronously based on a pre-configured csv file (DeployVM.csv)
@@ -35,7 +35,7 @@ Runs DeployVM specifying path to csv file, vCenter address and no confirmation
 .\DeployVM.ps1 -createcsv
 Creates a new/blank DeployVM.csv file in same directory as script
 ```
-#NOTES
+# NOTES
 Author: Shawn Masterson
 Created: May 2014
 Version: 1.2
@@ -67,7 +67,7 @@ Adding banner for each credential to show the domain where credentials are set
 If OU parameter is defined at the OU create the object on AD where the machine is register Linux and Windows
 
 
-##REQUIREMENTS
+# REQUIREMENTS
 PowerShell v3 or greater
 vCenter (tested on 5.1/5.5)
 PowerCLI 5.5 R2 or later
