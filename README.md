@@ -1,8 +1,8 @@
 DeployVMs
 =========
 
-Deploying multiple Linux VMs using PowerCli
-
+#Deploying multiple  VMs using PowerCli
+```
 .DESCRIPTION
 VMs are deployed asynchronously based on a pre-configured csv file (DeployVM.csv)
 Designed to run from Powershell ISE
@@ -34,8 +34,8 @@ Runs DeployVM specifying path to csv file, vCenter address and no confirmation
 .EXAMPLE
 .\DeployVM.ps1 -createcsv
 Creates a new/blank DeployVM.csv file in same directory as script
-
-.NOTES
+```
+#NOTES
 Author: Shawn Masterson
 Created: May 2014
 Version: 1.2
@@ -67,7 +67,7 @@ Adding banner for each credential to show the domain where credentials are set
 If OU parameter is defined at the OU create the object on AD where the machine is register Linux and Windows
 
 
-REQUIREMENTS
+##REQUIREMENTS
 PowerShell v3 or greater
 vCenter (tested on 5.1/5.5)
 PowerCLI 5.5 R2 or later
@@ -103,7 +103,7 @@ CSV Field Definitions
     Domain - DNS Domain must be populated
     OU - OU to create new computer accounts, must be the distinguished name eg "OU=TestOU1,OU=Servers,DC=my-homelab,DC=local"
 
-CREDITS
+###CREDITS
 Handling New-VM Async - LucD - @LucD22
 http://www.lucd.info/2010/02/21/about-async-tasks-the-get-task-cmdlet-and-a-hash-table/
 http://blog.smasterson.com/2014/05/21/deploying-multiple-vms-via-powercli-updated-v1-2/
@@ -113,6 +113,6 @@ http://blogs.vmware.com/PowerCLI/2014/06/working-customization-specifications-po
 
 USE AT YOUR OWN RISK!
 
-.LINK
+###LINK
 http://blog.smasterson.com/2014/05/21/deploying-multiple-vms-via-powercli-updated-v1-2/
 http://www.vidanez.com/2014/11/02/crear-multiples-linux-vms-de-un-fichero-csv-usando-powercli-deploying-multiple-linux-vms-using-powercli/
